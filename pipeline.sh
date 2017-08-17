@@ -2,23 +2,28 @@
 #
 # Usage:  pipeline.sh [ -h | --help | -v | --version ]
 #         pipeline.sh pull
-#         pipeline.sh run [--thread <int>] [--no-qc] [--input <dir>]
+#         pipeline.sh run [--thread <int>] [--no-qc] [--ref <fasta>]
+#                         [--ref-gene-map <txt>] [--input <dir>]
 #                         [--output <dir>]
 #
 # Description:
 #   Docker-based TPM calculating pipeline for single-cell RNA-seq
 #
 # Arguments:
-#   -h, --help      Print usage
-#   -v, --version   Print version information
-#   --thread <int>  Limit multithreading
-#   --no-qc         Skip QC checks with FastQC
-#   --input <dir>   Pass an absolute path to input directory
-#                   [default: $(pwd)/input]
-#   --output <dir>  Pass an absolute path to output directoryr
-#                   [default: $(pwd)/output]
-#   pull            Pull required Docker images
-#   run             Run the pipeline
+#   -h, --help            Print usage
+#   -v, --version         Print version information
+#   --thread <int>        Limit multithreading
+#   --no-qc               Skip QC checks with FastQC
+#   --ref <fasta>         Pass a gzip-compressed reference FASTA file
+#                         [default: $(pwd)/ref/MM_GRCm38_p5.fasta.gz]
+#   --ref-gene-map <txt>  Pass a gzip-compressed transcript-to-gene-map file
+#                         [default: $(pwd)/ref/MM_GRCm38_p5_gene_map.txt.gz]
+#   --input <dir>         Pass an absolute path to input directory
+#                         [default: $(pwd)/input]
+#   --output <dir>        Pass an absolute path to output directoryr
+#                         [default: $(pwd)/output]
+#   pull                  Pull required Docker images
+#   run                   Run the pipeline
 
 set -e
 
@@ -33,6 +38,8 @@ DC="docker-compose -f ${SCRIPT_ROOT}/docker-compose.yml"
 DC_RUN="${DC} run --rm -u $(id -u):$(id -g)"
 INPUT_DIR="$(pwd)/input"
 OUTPUT_DIR="$(pwd)/output"
+INPUT_REF_FASTA="$(pwd)/ref/MM_GRCm38_p5.fasta.gz"
+INPUT_REF_GENE_MAP_TXT="$(pwd)/ref/MM_GRCm38_p5_gene_map.txt.gz"
 RUN_FLAG=0
 NO_QC=0
 
@@ -83,6 +90,12 @@ if [[ -n "${1}" ]]; then
       '--no-qc' )
         NO_QC=1 && shift 1
         ;;
+      '--ref' )
+        INPUT_REF_FASTA="$(dirname ${2})/$(basename ${2})" && shift 2
+        ;;
+      '--ref-gene-map' )
+        INPUT_REF_GENE_MAP_TXT="$(dirname ${2})/$(basename ${2})" && shift 2
+        ;;
       '--input' )
         INPUT_DIR="$(dirname ${2})/$(basename ${2})" && shift 2
         ;;
@@ -108,42 +121,84 @@ set -u
 
 echo ">>> prepare output directories
 - ${OUTPUT_DIR}
-  -  cell
-  -  reference
-  -  summary
+  - cell
+  - reference
+  - summary
 "
 CELL_DIR="${OUTPUT_DIR}/cell"
-REFERENCE_DIR="${OUTPUT_DIR}/reference"
+REF_DIR="${OUTPUT_DIR}/ref"
 SUMMARY_DIR="${OUTPUT_DIR}/summary"
 ls ${INPUT_DIR} | xargs -I {} sh -c "[[ -d ${CELL_DIR}/{} ]] || mkdir -p ${CELL_DIR}/{}"
-[[ -d "${REFERENCE_DIR}" ]] || mkdir ${REFERENCE_DIR}
+[[ -d "${REF_DIR}" ]] || mkdir ${REF_DIR}
 [[ -d "${SUMMARY_DIR}" ]] || mkdir ${SUMMARY_DIR}
 
 echo '>>> print software versions'
-v_txt="${OUTPUT_DIR}/versions.txt"
-print_version | tee ${v_txt}
-echo -n 'fastqc: ' | tee -a ${v_txt}
-${DC_RUN} fastqc --version | tee -a ${v_txt}
-echo -n 'prinseq: ' | tee -a ${v_txt}
-${DC_RUN} prinseq --version | tee -a ${v_txt}
-echo -n 'rsem: ' | tee -a ${v_txt}
-${DC_RUN} rsem --version | tee -a ${v_txt}
+VERSIONS_TXT="${OUTPUT_DIR}/versions.txt"
+print_version | tee ${VERSIONS_TXT}
+echo -n 'fastqc: ' | tee -a ${VERSIONS_TXT}
+${DC_RUN} fastqc --version | tee -a ${VERSIONS_TXT}
+echo -n 'prinseq: ' | tee -a ${VERSIONS_TXT}
+${DC_RUN} prinseq --version | tee -a ${VERSIONS_TXT}
+echo -n 'rsem: ' | tee -a ${VERSIONS_TXT}
+${DC_RUN} rsem --version | tee -a ${VERSIONS_TXT}
 echo
 
+# QC checks
 if [[ ${NO_QC} -eq 0 ]]; then
   echo '>>> execute QC checks using FastQC'
   for sc in $(ls ${CELL_DIR}); do
     echo ">>>>>> cell: ${sc}"
     for fq in $(ls ${INPUT_DIR}/${sc}/*.fastq.gz); do
       ${DC_RUN} \
-        -v ${INPUT_DIR}/${sc}:/sc_input:ro \
-        -v ${CELL_DIR}/${sc}:/sc_output \
+        -v ${INPUT_DIR}/${sc}:/input:ro \
+        -v ${CELL_DIR}/${sc}:/output \
         fastqc \
         --threads ${N_THREAD} \
         --nogroup \
-        --outdir /sc_output \
-        /sc_input/$(basename ${fq})
+        --outdir /output \
+        /input/$(basename ${fq})
     done
   done
+  echo
+fi
+
+# preparations for RSEM
+RSEM_PREP_LOG="${REF_DIR}/rsem_prep_ref.log"
+if [[ ! -f ${RSEM_PREP_LOG} ]]; then
+  echo '>>> prepare RSEM reference files'
+  REF_TAG="$(basename ${INPUT_REF_FASTA} | awk -F '.fasta' '{print $1}')"
+  REF_FASTA="${REF_DIR}/${REF_TAG}.fasta"
+  REF_GENE_MAP_TXT="${REF_DIR}/$(basename ${INPUT_REF_GENE_MAP_TXT} | awk -F '.txt' '{print $1".txt"}')"
+  if [[ ! -f "${REF_FASTA}" ]]; then
+    case "$(basename ${INPUT_REF_FASTA} | awk -F '.fasta' '{print $NF}')" in
+      '.gz' )
+        unpigz -p ${N_THREAD} -c ${INPUT_REF_FASTA} > ${REF_FASTA}
+        ;;
+      '' )
+        cp ${INPUT_REF_FASTA} ${REF_FASTA}
+        ;;
+    esac
+  fi
+  if [[ ! -f "${REF_GENE_MAP_TXT}" ]]; then
+    case "$(basename ${INPUT_REF_GENE_MAP_TXT} | awk -F '.txt' '{print $NF}')" in
+      '.gz' )
+        unpigz -p ${N_THREAD} -c ${INPUT_REF_GENE_MAP_TXT} > ${REF_GENE_MAP_TXT}
+        ;;
+      '' )
+        cp ${INPUT_REF_GENE_MAP_TXT} ${REF_GENE_MAP_TXT}
+        ;;
+    esac
+  fi
+  ${DC_RUN} \
+    -v ${REF_DIR}:/ref:ro \
+    -v ${REF_RSEM_DIR}:/ref_rsem \
+    --entrypoint rsem-prepare-reference \
+    rsem \
+    -p ${N_THREAD} \
+    --transcript-to-gene-map /ref/$(basename ${REF_GENE_MAP_TXT}) \
+    --bowtie2 \
+    /ref/$(basename ${REF_FASTA_TXT}) \
+    /ref_rsem/${REF_TAG} \
+    > ${RSEM_PREP_LOG} 2>&1
   echo
 fi
