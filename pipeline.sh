@@ -15,9 +15,9 @@
 #   --thread <int>        Limit multithreading
 #   --no-qc               Skip QC checks with FastQC
 #   --ref <fasta>         Pass a gzip-compressed reference FASTA file
-#                         [default: $(pwd)/ref/MM_GRCm38_p5.fasta.gz]
+#                         [default: $(pwd)/ref/GRCm38_p5.fasta.gz]
 #   --ref-gene-map <txt>  Pass a gzip-compressed transcript-to-gene-map file
-#                         [default: $(pwd)/ref/MM_GRCm38_p5_gene_map.txt.gz]
+#                         [default: $(pwd)/ref/GRCm38_p5_gene_map.txt.gz]
 #   --input <dir>         Pass an absolute path to input directory
 #                         [default: $(pwd)/input]
 #   --output <dir>        Pass an absolute path to output directoryr
@@ -38,8 +38,8 @@ DC="docker-compose -f ${SCRIPT_ROOT}/docker-compose.yml"
 DC_RUN="${DC} run --rm -u $(id -u):$(id -g)"
 INPUT_DIR="$(pwd)/input"
 OUTPUT_DIR="$(pwd)/output"
-INPUT_REF_FASTA="$(pwd)/ref/MM_GRCm38_p5.fasta.gz"
-INPUT_REF_GENE_MAP_TXT="$(pwd)/ref/MM_GRCm38_p5_gene_map.txt.gz"
+INPUT_REF_FASTA="$(pwd)/ref/GRCm38_p5.fasta.gz"
+INPUT_REF_GENE_MAP_TXT="$(pwd)/ref/GRCm38_p5_gene_map.txt.gz"
 RUN_FLAG=0
 NO_QC=0
 
@@ -65,12 +65,6 @@ function count_cpu_cores {
       grep -ce '^processor' /proc/cpuinfo
       ;;
   esac
-}
-
-function pull_images {
-  echo '>>> pull Docker images'
-  ${DC} pull
-  echo
 }
 
 N_THREAD=$(count_cpu_cores)
@@ -103,7 +97,7 @@ if [[ -n "${1}" ]]; then
         OUTPUT_DIR="$(dirname ${2})/$(basename ${2})" && shift 2
         ;;
       'pull' )
-        pull_images && exit 0
+        echo '>>> pull images' && ${DC} pull && exit 0
         ;;
       'run' )
         RUN_FLAG=1 && shift 1
@@ -118,19 +112,24 @@ else
 fi
 
 set -u
+PIGZ="pigz -p ${N_THREAD}"
+UNPIGZ="unpigz -p ${N_THREAD}"
 
+### 1.  Preparation
 echo ">>> prepare output directories
 - ${OUTPUT_DIR}
   - sample
-  - reference
-  - summary
-"
+  - ref
+  - summary"
 SAMPLE_DIR="${OUTPUT_DIR}/sample"
 REF_DIR="${OUTPUT_DIR}/ref"
 SUMMARY_DIR="${OUTPUT_DIR}/summary"
-ls ${INPUT_DIR} | xargs -I {} sh -c "[[ -d ${SAMPLE_DIR}/{} ]] || mkdir -p ${SAMPLE_DIR}/{}"
+ls ${INPUT_DIR} | xargs -I {} bash -c "\
+  [[ -d ${SAMPLE_DIR}/{} ]] || mkdir -p ${SAMPLE_DIR}/{}
+"
 [[ -d "${REF_DIR}" ]] || mkdir ${REF_DIR}
 [[ -d "${SUMMARY_DIR}" ]] || mkdir ${SUMMARY_DIR}
+echo
 
 echo '>>> print software versions'
 VERSIONS_TXT="${OUTPUT_DIR}/versions.txt"
@@ -143,62 +142,83 @@ echo -n 'rsem: ' | tee -a ${VERSIONS_TXT}
 ${DC_RUN} rsem --version | tee -a ${VERSIONS_TXT}
 echo
 
-# QC checks
-if [[ ${NO_QC} -eq 0 ]]; then
-  echo '>>> execute QC checks using FastQC'
-  for s in $(ls ${SAMPLE_DIR}); do
-    echo ">>>>>> sample: ${s}"
-    for fq in $(ls ${INPUT_DIR}/${s}/*.fastq.gz); do
-      ${DC_RUN} \
-        -v ${INPUT_DIR}/${s}:/input:ro \
-        -v ${SAMPLE_DIR}/${s}:/output \
-        fastqc \
-        --threads ${N_THREAD} \
-        --nogroup \
-        --outdir /output \
-        /input/$(basename ${fq})
-    done
-  done
-  echo
-fi
+echo '>>> concatenate fastq files'
+ls ${SAMPLE_DIR} | xargs -P ${N_THREAD} -I {} bash -c "\
+  cat ${INPUT_DIR}/{}/*.fastq.gz > ${SAMPLE_DIR}/{}/raw.fastq.gz
+"
+echo
 
-# preparations for RSEM
-RSEM_PREP_LOG="${REF_DIR}/rsem_prep_ref.log"
+REF_TAG="$(basename ${INPUT_REF_FASTA} | awk -F '.fasta' '{print $1}')"
+RSEM_PREP_LOG="${REF_DIR}/rsem_prepare_reference.log"
 if [[ ! -f ${RSEM_PREP_LOG} ]]; then
   echo '>>> prepare RSEM reference files'
-  REF_TAG="$(basename ${INPUT_REF_FASTA} | awk -F '.fasta' '{print $1}')"
-  REF_FASTA="${REF_DIR}/${REF_TAG}.fasta"
-  REF_GENE_MAP_TXT="${REF_DIR}/$(basename ${INPUT_REF_GENE_MAP_TXT} | awk -F '.txt' '{print $1".txt"}')"
-  if [[ ! -f "${REF_FASTA}" ]]; then
-    case "$(basename ${INPUT_REF_FASTA} | awk -F '.fasta' '{print $NF}')" in
-      '.gz' )
-        unpigz -p ${N_THREAD} -c ${INPUT_REF_FASTA} > ${REF_FASTA}
-        ;;
-      '' )
-        cp ${INPUT_REF_FASTA} ${REF_FASTA}
-        ;;
-    esac
-  fi
-  if [[ ! -f "${REF_GENE_MAP_TXT}" ]]; then
-    case "$(basename ${INPUT_REF_GENE_MAP_TXT} | awk -F '.txt' '{print $NF}')" in
-      '.gz' )
-        unpigz -p ${N_THREAD} -c ${INPUT_REF_GENE_MAP_TXT} > ${REF_GENE_MAP_TXT}
-        ;;
-      '' )
-        cp ${INPUT_REF_GENE_MAP_TXT} ${REF_GENE_MAP_TXT}
-        ;;
-    esac
-  fi
-  ${DC_RUN} \
-    -v ${REF_DIR}:/ref:ro \
-    -v ${REF_RSEM_DIR}:/ref_rsem \
+  mkdir "${REF_DIR}/rsem"
+  ${UNPIGZ} -c ${INPUT_REF_FASTA} > ${REF_DIR}/${REF_TAG}.fasta
+  ${UNPIGZ} -c ${INPUT_REF_GENE_MAP_TXT} > ${REF_DIR}/${REF_TAG}_gene_map.txt
+  ${DC_RUN} -v ${REF_DIR}:/ref:ro -v ${REF_DIR}/rsem:/ref_rsem \
     --entrypoint rsem-prepare-reference \
     rsem \
     -p ${N_THREAD} \
-    --transcript-to-gene-map /ref/$(basename ${REF_GENE_MAP_TXT}) \
     --bowtie2 \
-    /ref/$(basename ${REF_FASTA_TXT}) \
+    --transcript-to-gene-map /ref/${REF_TAG}_gene_map.txt \
+    /ref/${REF_TAG}.fasta \
     /ref_rsem/${REF_TAG} \
     > ${RSEM_PREP_LOG} 2>&1
+  ${PIGZ} ${REF_DIR}/${REF_TAG}.fasta ${REF_DIR}/${REF_TAG}_gene_map.txt
   echo
 fi
+
+
+### 2.  QC checks
+if [[ ${NO_QC} -eq 0 ]]; then
+  echo '>>> execute QC checks using FastQC'
+  ls ${SAMPLE_DIR} | xargs -I {} bash -c "\
+    ${DC_RUN} -v ${SAMPLE_DIR}/{}:/output \
+    fastqc \
+    --threads ${N_THREAD} \
+    --nogroup \
+    --outdir /output \
+    /output/raw.fastq.gz \
+    > ${SAMPLE_DIR}/{}/fastqc.log 2>&1
+  "
+  echo
+fi
+
+
+### 3.  Trimming and filtering
+echo '>>> trim and filter sequences'
+find ${SAMPLE_DIR} -maxdepth 2 -type f -name 'raw.fastq.gz' | xargs ${UNPIGZ}
+ls ${SAMPLE_DIR} | xargs -P ${N_THREAD} -I {} bash -c "\
+  ${DC_RUN} -v ${SAMPLE_DIR}/{}:/output \
+  prinseq \
+  -min_len 30 \
+  -trim_tail_right 5 \
+  -trim_tail_left 5 \
+  -min_qual_mean 20 \
+  -trim_qual_right 20 \
+  -trim_qual_left 20 \
+  -fastq output/raw.fastq \
+  -out_good output/prinseq_good \
+  -out_bad output/prinseq_bad \
+  > ${SAMPLE_DIR}/{}/prinseq_lite.log 2>&1
+"
+find ${SAMPLE_DIR} -maxdepth 2 -type f -name '*.fastq' | xargs ${PIGZ}
+echo
+
+
+### 4.  Mapping
+echo '>>> map reads and calculate TPM'
+ls ${SAMPLE_DIR} | xargs -I {} bash -c "\
+  ${DC_RUN} -v ${SAMPLE_DIR}/{}:/output -v ${REF_DIR}/rsem:/ref_rsem \
+  --entrypoint rsem-calculate-expression \
+  rsem \
+  --bowtie2 \
+  --estimate-rspd \
+  -p ${N_THREAD} \
+  --calc-ci \
+  /output/prinseq_good.fastq.gz \
+  /ref_rsem/${REF_TAG} \
+  /output/rsem_${REF_TAG}_{} \
+  > ${SAMPLE_DIR}/{}/rsem_calculate_expression.log 2>&1
+"
+echo
