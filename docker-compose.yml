@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  fastqc:
+    container_name: fastqc
+    image: dceoy/fastqc:latest
+  prinseq:
+    container_name: prinseq
+    image: dceoy/prinseq:latest
+  rsem:
+    container_name: rsem
+    image: dceoy/rsem:latest

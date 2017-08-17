@@ -1,2 +1,2 @@
 # single-cell-tpm-calculator
-A TPM calculating pipeline for single-cell RNA-seq
+A Docker-based TPM calculating pipeline for single-cell RNA-seq
