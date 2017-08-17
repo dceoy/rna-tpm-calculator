@@ -1,7 +1,7 @@
-# single-cell-tpm-calculator
-A Docker-based TPM calculating pipeline for single-cell RNA-seq
+# rna-tpm-calculator
+A Docker-based TPM calculating pipeline for RNA-seq
 
-### requirements
+### Requirements
 
 - docker
 - docker-compose

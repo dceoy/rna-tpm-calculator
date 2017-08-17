@@ -7,7 +7,7 @@
 #                         [--output <dir>]
 #
 # Description:
-#   Docker-based TPM calculating pipeline for single-cell RNA-seq
+#   Docker-based TPM calculating pipeline for RNA-seq
 #
 # Arguments:
 #   -h, --help            Print usage
@@ -29,7 +29,7 @@ set -e
 
 [[ "${1}" = '--debug' ]] && set -x && shift 1
 
-REPO_NAME='single-cell-tpm-calculator'
+REPO_NAME='rna-tpm-calculator'
 SCRIPT_NAME='pipeline.sh'
 SCRIPT_VERSION='v0.0.1'
 SCRIPT_ROOT="$(dirname ${0})"
@@ -121,14 +121,14 @@ set -u
 
 echo ">>> prepare output directories
 - ${OUTPUT_DIR}
-  - cell
+  - sample
   - reference
   - summary
 "
-CELL_DIR="${OUTPUT_DIR}/cell"
+SAMPLE_DIR="${OUTPUT_DIR}/sample"
 REF_DIR="${OUTPUT_DIR}/ref"
 SUMMARY_DIR="${OUTPUT_DIR}/summary"
-ls ${INPUT_DIR} | xargs -I {} sh -c "[[ -d ${CELL_DIR}/{} ]] || mkdir -p ${CELL_DIR}/{}"
+ls ${INPUT_DIR} | xargs -I {} sh -c "[[ -d ${SAMPLE_DIR}/{} ]] || mkdir -p ${SAMPLE_DIR}/{}"
 [[ -d "${REF_DIR}" ]] || mkdir ${REF_DIR}
 [[ -d "${SUMMARY_DIR}" ]] || mkdir ${SUMMARY_DIR}
 
@@ -146,12 +146,12 @@ echo
 # QC checks
 if [[ ${NO_QC} -eq 0 ]]; then
   echo '>>> execute QC checks using FastQC'
-  for sc in $(ls ${CELL_DIR}); do
-    echo ">>>>>> cell: ${sc}"
-    for fq in $(ls ${INPUT_DIR}/${sc}/*.fastq.gz); do
+  for s in $(ls ${SAMPLE_DIR}); do
+    echo ">>>>>> sample: ${s}"
+    for fq in $(ls ${INPUT_DIR}/${s}/*.fastq.gz); do
       ${DC_RUN} \
-        -v ${INPUT_DIR}/${sc}:/input:ro \
-        -v ${CELL_DIR}/${sc}:/output \
+        -v ${INPUT_DIR}/${s}:/input:ro \
+        -v ${SAMPLE_DIR}/${s}:/output \
         fastqc \
         --threads ${N_THREAD} \
         --nogroup \
