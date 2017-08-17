@@ -10,3 +10,9 @@ services:
   rsem:
     container_name: rsem
     image: dceoy/rsem:latest
+  samtools:
+    container_name: samtools
+    image: dceoy/samtools:latest
+  r-tidyverse:
+    container_name: r-tidyverse
+    image: dceoy/r-tidyverse:latest
