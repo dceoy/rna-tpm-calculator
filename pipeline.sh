@@ -134,18 +134,12 @@ echo
 echo '>>> print software versions'
 VERSIONS_TXT="${OUTPUT_DIR}/versions.txt"
 print_version | tee ${VERSIONS_TXT}
-echo -n 'fastqc: ' | tee -a ${VERSIONS_TXT}
-${DC_RUN} fastqc --version | tee -a ${VERSIONS_TXT}
-echo -n 'prinseq: ' | tee -a ${VERSIONS_TXT}
-${DC_RUN} prinseq --version | tee -a ${VERSIONS_TXT}
-echo -n 'rsem: ' | tee -a ${VERSIONS_TXT}
-${DC_RUN} rsem --version | tee -a ${VERSIONS_TXT}
-echo
-
-echo '>>> concatenate fastq files'
-ls ${SAMPLE_DIR} | xargs -P ${N_THREAD} -I {} bash -c "\
-  cat ${INPUT_DIR}/{}/*.fastq.gz > ${SAMPLE_DIR}/{}/raw.fastq.gz
-"
+for l in 'fastqc' 'prinseq' 'rsem'; do
+  echo -n "${l}: " | tee -a ${VERSIONS_TXT}
+  ${DC_RUN} ${l} --version | tee -a ${VERSIONS_TXT}
+done
+echo -n "bowtie2: " | tee -a ${VERSIONS_TXT}
+${DC_RUN} --entrypoint bowtie2 rsem --version | tee -a ${VERSIONS_TXT}
 echo
 
 REF_TAG="$(basename ${INPUT_REF_FASTA} | awk -F '.fasta' '{print $1}')"
