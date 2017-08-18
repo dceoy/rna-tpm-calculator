@@ -7,6 +7,10 @@ services:
   prinseq:
     container_name: prinseq
     image: dceoy/prinseq:latest
+  bowtie2:
+    container_name: rsem
+    image: dceoy/rsem:latest
+    entrypoint: bowtie2
   rsem:
     container_name: rsem
     image: dceoy/rsem:latest
