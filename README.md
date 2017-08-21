@@ -1,5 +1,5 @@
 # rna-tpm-calculator
-A Docker-based TPM calculating pipeline for RNA-seq
+A Docker-based TPM calculating workflow for RNA-seq
 
 ### Requirements
 
