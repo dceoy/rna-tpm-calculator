@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Usage:  pipeline.sh [ -h | --help | -v | --version ]
-#         pipeline.sh pull
-#         pipeline.sh run [--thread <int>] [--no-qc] [--ref <fasta>]
+# Usage:  workflow.sh [ -h | --help | -v | --version ]
+#         workflow.sh pull
+#         workflow.sh run [--thread <int>] [--no-qc] [--ref <fasta>]
 #                         [--ref-gene-map <txt>] [--input <dir>]
 #                         [--output <dir>]
 #
 # Description:
-#   Docker-based TPM calculating pipeline for RNA-seq
+#   Docker-based TPM calculating workflow for RNA-seq
 #
 # Arguments:
 #   -h, --help            Print usage
@@ -23,7 +23,7 @@
 #   --output <dir>        Pass an absolute path to output directoryr
 #                         [default: $(pwd)/output]
 #   pull                  Pull required Docker images
-#   run                   Run the pipeline
+#   run                   Run the workflow
 
 set -e
 
@@ -111,42 +111,52 @@ fi
 
 set -u
 PIGZ="pigz -p ${N_THREAD}"
+SAMPLE_DIR="${OUTPUT_DIR}/sample"
+REF_DIR="${OUTPUT_DIR}/ref"
+REF_RSEM_DIR="${REF_DIR}/rsem"
+SUMMARY_DIR="${OUTPUT_DIR}/summary"
+COMPLETED_LOG="${OUTPUT_DIR}/completed.log"
+VER_TXT="${OUTPUT_DIR}/versions.txt"
+REF_TAG="$(basename ${INPUT_REF_FASTA} | awk -F '.fasta' '{print $1}')"
+WORKFLOW=(
+  '>>> make output directories'
+  '>>> concatenate fastq files'
+  '>>> prepare RSEM reference files'
+  '>>> execute QC checks using FastQC'
+  '>>> trim and filter sequences'
+  '>>> map reads and calculate TPM'
+)
 
-### 1.  Preparation
-echo ">>> make output directories
-- ${OUTPUT_DIR}
+
+# 0.  make output directories
+if [[ ! -d "${OUTPUT_DIR}" ]]; then
+  echo "${WORKFLOW[0]}
+  - ${OUTPUT_DIR}
   - sample
   - ref
   - summary"
-SAMPLE_DIR="${OUTPUT_DIR}/sample" && [[ -d "${SAMPLE_DIR}" ]] || mkdir -p ${SAMPLE_DIR}
-REF_DIR="${OUTPUT_DIR}/ref" && [[ -d "${REF_DIR}" ]] || mkdir ${REF_DIR}
-SUMMARY_DIR="${OUTPUT_DIR}/summary" && [[ -d "${SUMMARY_DIR}" ]] || mkdir ${SUMMARY_DIR}
-ls ${INPUT_DIR} | xargs -I {} bash -c "[[ -d ${SAMPLE_DIR}/{} ]] || mkdir ${SAMPLE_DIR}/{}"
-echo
+  mkdir ${SAMPLE_DIR} ${REF_DIR} ${SUMMARY_DIR}
+  echo "[${REPO_NAME}]" | tee ${VER_TXT} && print_version | tee -a ${VER_TXT}
+  echo "$(date) ${WORKFLOW[0]}" > ${COMPLETED_LOG}
+fi
 
-echo '>>> print software versions'
-VER_TXT="${OUTPUT_DIR}/versions.txt"
-echo "[${REPO_NAME}]" | tee ${VER_TXT} && print_version | tee -a ${VER_TXT}
-echo '[fastqc]' | tee -a ${VER_TXT} && ${DC_RUN} fastqc --version | tee -a ${VER_TXT}
-echo '[prinseq]' | tee -a ${VER_TXT} && ${DC_RUN} prinseq --version | tee -a ${VER_TXT}
-echo '[bowtie2]' | tee -a ${VER_TXT} && ${DC_RUN} bowtie2 --version | tee -a ${VER_TXT}
-echo '[rsem]' | tee -a ${VER_TXT} && ${DC_RUN} rsem --version | tee -a ${VER_TXT}
-echo
 
-echo '>>> concatenate fastq files'
-ls ${SAMPLE_DIR} \
-  | xargs -P ${N_THREAD} -I {} bash -c \
-  "cat ${INPUT_DIR}/{}/*.fastq.gz > ${SAMPLE_DIR}/{}/raw.fastq.gz"
-echo
+# 1.  concatenate fastq files
+echo "${WORKFLOW[1]}"
+ls ${INPUT_DIR} | xargs -P ${N_THREAD} -I {} bash -c \
+  "mkdir ${SAMPLE_DIR}/{} && cat ${INPUT_DIR}/{}/*.fastq.gz > ${SAMPLE_DIR}/{}/raw.fastq.gz"
+echo "$(date) ${WORKFLOW[1]}" >> ${COMPLETED_LOG}
 
-REF_TAG="$(basename ${INPUT_REF_FASTA} | awk -F '.fasta' '{print $1}')"
-RSEM_PREP_LOG="${REF_DIR}/rsem_prepare_reference.log"
-if [[ ! -f ${RSEM_PREP_LOG} ]]; then
-  echo '>>> prepare RSEM reference files'
-  mkdir "${REF_DIR}/rsem"
+
+# 2.  prepare RSEM reference files
+if [[ ! -d ${REF_RSEM_DIR} ]]; then
+  echo "${WORKFLOW[2]}"
+  echo '[bowtie2]' | tee -a ${VER_TXT} && ${DC_RUN} bowtie2 --version | tee -a ${VER_TXT}
+  echo '[rsem]' | tee -a ${VER_TXT} && ${DC_RUN} rsem --version | tee -a ${VER_TXT}
+  mkdir "${REF_RSEM_DIR}"
   ${PIGZ} -dc ${INPUT_REF_FASTA} > ${REF_DIR}/${REF_TAG}.fasta
   ${PIGZ} -dc ${INPUT_REF_GENE_MAP_TXT} > ${REF_DIR}/${REF_TAG}_gene_map.txt
-  ${DC_RUN} -v ${REF_DIR}:/rf:ro -v ${REF_DIR}/rsem:/rr \
+  ${DC_RUN} -v ${REF_DIR}:/rf:ro -v ${REF_RSEM_DIR}:/rr \
     --entrypoint rsem-prepare-reference \
     rsem \
     -p ${N_THREAD} \
@@ -154,15 +164,16 @@ if [[ ! -f ${RSEM_PREP_LOG} ]]; then
     --transcript-to-gene-map /rf/${REF_TAG}_gene_map.txt \
     /rf/${REF_TAG}.fasta \
     /rr/${REF_TAG} \
-    > ${RSEM_PREP_LOG} 2>&1
+    > ${REF_RSEM_DIR}/rsem_prepare_reference.log 2>&1
   ${PIGZ} ${REF_DIR}/${REF_TAG}.fasta ${REF_DIR}/${REF_TAG}_gene_map.txt
-  echo
+  echo "$(date) ${WORKFLOW[2]}" >> ${COMPLETED_LOG}
 fi
 
 
-### 2.  QC checks
+# 3.  execute QC checks using FastQC
 if [[ ${NO_QC} -ne 0 ]]; then
-  echo '>>> execute QC checks using FastQC'
+  echo "${WORKFLOW[3]}"
+  echo '[fastqc]' | tee -a ${VER_TXT} && ${DC_RUN} fastqc --version | tee -a ${VER_TXT}
   for s in $(ls ${SAMPLE_DIR}); do
     ${DC_RUN} -v ${SAMPLE_DIR}/${s}:/sc \
       fastqc \
@@ -172,12 +183,13 @@ if [[ ${NO_QC} -ne 0 ]]; then
       /sc/raw.fastq.gz \
       > ${SAMPLE_DIR}/${s}/fastqc.log 2>&1
   done
-  echo
+  echo "$(date) ${WORKFLOW[3]}" >> ${COMPLETED_LOG}
 fi
 
 
-### 3.  Trimming and filtering
-echo '>>> trim and filter sequences'
+# 4.  trim and filter sequences
+echo "${WORKFLOW[4]}"
+echo '[prinseq]' | tee -a ${VER_TXT} && ${DC_RUN} prinseq --version | tee -a ${VER_TXT}
 ${DC_RUN} -v ${SAMPLE_DIR}:/sd --entrypoint bash \
   prinseq \
   -c "\
@@ -190,13 +202,13 @@ ${DC_RUN} -v ${SAMPLE_DIR}:/sd --entrypoint bash \
   -out_good /sd/{}/prinseq_good -out_bad /sd/{}/prinseq_bad \
   > /sd/{}/prinseq_lite.log 2>&1'"
 find ${SAMPLE_DIR} -name 'prinseq_raw.fastq' -or -name 'prinseq_bad.fastq' | xargs ${PIGZ}
-echo
+echo "$(date) ${WORKFLOW[4]}" >> ${COMPLETED_LOG}
 
 
-### 4.  Mapping
-echo '>>> map reads and calculate TPM'
+# 5.  map reads and calculate TPM
+echo "${WORKFLOW[5]}"
 for s in $(ls ${SAMPLE_DIR}); do
-  ${DC_RUN} -v ${SAMPLE_DIR}/${s}:/sc -v ${REF_DIR}/rsem:/rr \
+  ${DC_RUN} -v ${SAMPLE_DIR}/${s}:/sc -v ${REF_RSEM_DIR}:/rr \
     --entrypoint rsem-calculate-expression \
     rsem \
     --bowtie2 \
@@ -209,4 +221,4 @@ for s in $(ls ${SAMPLE_DIR}); do
     > ${SAMPLE_DIR}/${s}/rsem_calculate_expression.log 2>&1
 done
 find ${SAMPLE_DIR} -name 'prinseq_good.fastq' | xargs ${PIGZ}
-echo
+echo "$(date) ${WORKFLOW[5]}" >> ${COMPLETED_LOG}
