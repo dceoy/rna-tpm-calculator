@@ -39,7 +39,6 @@ INPUT_DIR="$(pwd)/input"
 OUTPUT_DIR="$(pwd)/output"
 INPUT_REF_FASTA="$(pwd)/ref/GRCm38_p5.fasta.gz"
 INPUT_REF_GENE_MAP_TXT="$(pwd)/ref/GRCm38_p5_gene_map.txt.gz"
-RUN_FLAG=0
 NO_QC=0
 
 function print_version {
@@ -99,7 +98,7 @@ if [[ -n "${1}" ]]; then
         echo '>>> pull images' && ${DC} pull && exit 0
         ;;
       'run' )
-        RUN_FLAG=1 && shift 1
+        shift 1
         ;;
       * )
         abort "invalid argument \`${1}\`"
@@ -114,7 +113,7 @@ set -u
 PIGZ="pigz -p ${N_THREAD}"
 
 ### 1.  Preparation
-echo ">>> prepare output directories
+echo ">>> make output directories
 - ${OUTPUT_DIR}
   - sample
   - ref
@@ -132,6 +131,12 @@ echo '[fastqc]' | tee -a ${VER_TXT} && ${DC_RUN} fastqc --version | tee -a ${VER
 echo '[prinseq]' | tee -a ${VER_TXT} && ${DC_RUN} prinseq --version | tee -a ${VER_TXT}
 echo '[bowtie2]' | tee -a ${VER_TXT} && ${DC_RUN} bowtie2 --version | tee -a ${VER_TXT}
 echo '[rsem]' | tee -a ${VER_TXT} && ${DC_RUN} rsem --version | tee -a ${VER_TXT}
+echo
+
+echo '>>> concatenate fastq files'
+ls ${SAMPLE_DIR} \
+  | xargs -P ${N_THREAD} -I {} bash -c \
+  "cat ${INPUT_DIR}/{}/*.fastq.gz > ${SAMPLE_DIR}/{}/raw.fastq.gz"
 echo
 
 REF_TAG="$(basename ${INPUT_REF_FASTA} | awk -F '.fasta' '{print $1}')"
@@ -156,7 +161,7 @@ fi
 
 
 ### 2.  QC checks
-if [[ ${NO_QC} -eq 0 ]]; then
+if [[ ${NO_QC} -ne 0 ]]; then
   echo '>>> execute QC checks using FastQC'
   for s in $(ls ${SAMPLE_DIR}); do
     ${DC_RUN} -v ${SAMPLE_DIR}/${s}:/sc \
