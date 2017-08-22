@@ -113,6 +113,7 @@ SAMPLE_DIR="${OUTPUT_DIR}/sample"
 REF_DIR="${OUTPUT_DIR}/ref"
 REF_RSEM_DIR="${REF_DIR}/rsem"
 SUMMARY_DIR="${OUTPUT_DIR}/summary"
+READ_COUNT_CSV="${SUMMARY_DIR}/read_count.csv"
 COMPLETED_LOG="${OUTPUT_DIR}/completed.log"
 VER_TXT="${OUTPUT_DIR}/versions.txt"
 REF_TAG="$(basename ${INPUT_REF_FASTA} | awk -F '.fasta' '{print $1}')"
@@ -147,6 +148,7 @@ if [[ ! -d "${OUTPUT_DIR}" ]]; then
 elif [[ ! -f "${COMPLETED_LOG}" ]]; then
   touch ${COMPLETED_LOG}
 fi
+echo 'id,src,type,count' > ${READ_COUNT_CSV}
 
 
 # 1.  concatenate fastq files
@@ -154,6 +156,10 @@ if $(is_not_completed ${WORKFLOW[1]}); then
   echo "${WORKFLOW[1]}"
   ls -L ${INPUT_DIR} | xargs -P ${N_THREAD} -I {} bash -c \
     "mkdir ${SAMPLE_DIR}/{} && cat ${INPUT_DIR}/{}/*.fastq.gz > ${SAMPLE_DIR}/{}/raw.fastq.gz"
+  find ${SAMPLE_DIR} -name 'raw.fastq.gz' \
+    | xargs -P ${N_THREAD} zgrep -ce '^@HWI-[A-Z0-9]\+:' \
+    | sed -e 's/^.*\/\([^\/]\+\)\/raw\.fastq\.gz:\([0-9]\+\)$/\1,fastq,raw,\2/' \
+    | tee -a ${READ_COUNT_CSV}
   echo_completed ${WORKFLOW[1]}
 fi
 
@@ -206,7 +212,11 @@ if $(is_not_completed ${WORKFLOW[4]}); then
     -fastq stdin \
     -out_good ${SAMPLE_DIR}/{}/prinseq_good -out_bad ${SAMPLE_DIR}/{}/prinseq_bad \
     > ${SAMPLE_DIR}/{}/prinseq_lite.log 2>&1"
-  find ${SAMPLE_DIR} -name 'prinseq_raw.fastq' -or -name 'prinseq_bad.fastq' | xargs ${PGZ}
+  find ${SAMPLE_DIR} -name 'prinseq_bad.fastq' | xargs ${PGZ}
+  find ${SAMPLE_DIR} -name 'prinseq_good.fastq' \
+    | xargs -P ${N_THREAD} grep -ce '^@HWI-[A-Z0-9]\+:' \
+    | sed -e 's/^.*\/\([^\/]\+\)\/prinseq_good\.fastq:\([0-9]\+\)$/\1,fastq,qc,\2/' \
+    | tee -a ${READ_COUNT_CSV}
   echo_completed ${WORKFLOW[4]}
 fi
 
@@ -222,9 +232,25 @@ if $(is_not_completed ${WORKFLOW[5]}); then
       --calc-ci \
       ${SAMPLE_DIR}/${s}/prinseq_good.fastq \
       ${REF_RSEM_DIR}/${REF_TAG} \
-      ${SAMPLE_DIR}/${s}/rsem_${REF_TAG}_${s} \
+      ${SAMPLE_DIR}/${s}/rsem_aligned \
       > ${SAMPLE_DIR}/${s}/rsem_calculate_expression.log 2>&1
   done
   find ${SAMPLE_DIR} -name 'prinseq_good.fastq' | xargs ${PGZ}
+  find ${SAMPLE_DIR} -name 'rsem.transcript.bam' \
+    | sed -e 's/\/rsem.transcript.bam$//' \
+    | xargs -P ${N_THREAD} -I {} bash -c \
+    'samtools flagstat {}/rsem.transcript.bam > {}/samtools_flagstat.txt'
+  find ${SAMPLE_DIR} -name 'samtools_flagstat.txt' \
+    | sed -e 's/^.*\/\([^\/]\+\)\/samtools_flagstat\.txt$/\1/' \
+    | xargs -P ${N_THREAD} -I {} awk '{
+      if (NR == 1) {
+        print "{},bam,total,"$1
+      } else if (NR == 2) {
+        print "{},bam,secondary,"$1
+      } else if (NR == 5) {
+        print "{},bam,mapped,"$1
+      }
+    }' ${SAMPLE_DIR}/{}/samtools_flagstat.txt \
+    | tee -a ${READ_COUNT_CSV}
   echo_completed ${WORKFLOW[5]}
 fi
