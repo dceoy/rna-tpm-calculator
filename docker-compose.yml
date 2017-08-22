@@ -1,22 +1,21 @@
 version: '3'
 
 services:
-  fastqc:
-    container_name: fastqc
-    image: dceoy/fastqc:latest
-  prinseq:
-    container_name: prinseq
-    image: dceoy/prinseq:latest
-  bowtie2:
-    container_name: rsem
-    image: dceoy/rsem:latest
-    entrypoint: bowtie2
-  rsem:
-    container_name: rsem
-    image: dceoy/rsem:latest
-  samtools:
-    container_name: samtools
-    image: dceoy/samtools:latest
-  r-tidyverse:
-    container_name: r-tidyverse
-    image: dceoy/r-tidyverse:latest
+  tpm-calc:
+    container_name: tpm-calc
+    build:
+      context: build
+      args:
+        http_proxy: ${http_proxy}
+    user: ${UID}:${GID}
+    volumes:
+      - .:/share
+    working_dir: /share
+    command:
+      - ./workflow.sh
+      - --debug
+      - run
+      - --ref
+      - ref/GRCm38_p4_TCF7.fasta.gz
+      - --ref-gene-map
+      - ref/GRCm38_p4_TCF7_gene_map.txt.gz
