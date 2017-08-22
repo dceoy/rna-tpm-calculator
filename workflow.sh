@@ -152,7 +152,7 @@ fi
 # 1.  concatenate fastq files
 if $(is_not_completed ${WORKFLOW[1]}); then
   echo "${WORKFLOW[1]}"
-  ls ${INPUT_DIR} | xargs -P ${N_THREAD} -I {} bash -c \
+  ls -L ${INPUT_DIR} | xargs -P ${N_THREAD} -I {} bash -c \
     "mkdir ${SAMPLE_DIR}/{} && cat ${INPUT_DIR}/{}/*.fastq.gz > ${SAMPLE_DIR}/{}/raw.fastq.gz"
   echo_completed ${WORKFLOW[1]}
 fi
@@ -182,7 +182,7 @@ fi
 if [[ ${NO_QC} -ne 0 ]] && $(is_not_completed ${WORKFLOW[3]}); then
   echo "${WORKFLOW[3]}"
   echo '[fastqc]' | tee -a ${VER_TXT} && fastqc --version | tee -a ${VER_TXT}
-  for s in $(ls ${SAMPLE_DIR}); do
+  for s in $(ls -L ${SAMPLE_DIR}); do
     fastqc \
       --threads ${N_THREAD} \
       --nogroup \
@@ -198,7 +198,7 @@ fi
 if $(is_not_completed ${WORKFLOW[4]}); then
   echo "${WORKFLOW[4]}"
   echo '[prinseq]' | tee -a ${VER_TXT} && prinseq-lite.pl --version | tee -a ${VER_TXT}
-  ls ${SAMPLE_DIR} | xargs -P ${N_THREAD} -I {} bash -c "\
+  ls -L ${SAMPLE_DIR} | xargs -P ${N_THREAD} -I {} bash -c "\
     gzip -dc ${SAMPLE_DIR}/{}/raw.fastq.gz | /usr/local/bin/perl \
     /usr/local/src/prinseq/prinseq-lite.pl \
     -min_len 30 -trim_tail_right 5 -trim_tail_left 5 \
@@ -214,7 +214,7 @@ fi
 # 5.  map reads and calculate TPM
 if $(is_not_completed ${WORKFLOW[5]}); then
   echo "${WORKFLOW[5]}"
-  for s in $(ls ${SAMPLE_DIR}); do
+  for s in $(ls -L ${SAMPLE_DIR}); do
     rsem-calculate-expression \
       --bowtie2 \
       --estimate-rspd \
