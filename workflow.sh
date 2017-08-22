@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 #
 # Usage:  workflow.sh [ -h | --help | -v | --version ]
-#         workflow.sh pull [--docker-compose <path>]
 #         workflow.sh run [--thread <int>] [--no-qc] [--ref <fasta>]
 #                         [--ref-gene-map <txt>] [--input <dir>]
-#                         [--docker-compose <path>] [--pigz <path>]
 #                         [--output <dir>]
 #
 # Description:
-#   Docker-based TPM calculating workflow for RNA-seq
+#   TPM calculating workflow for RNA-seq
 #
 # Arguments:
 #   -h, --help              Print usage
@@ -19,13 +17,10 @@
 #                           [default: ./ref/GRCm38_p5.fasta.gz]
 #   --ref-gene-map <txt>    Pass a gzip-compressed transcript-to-gene-map file
 #                           [default: ./ref/GRCm38_p5_gene_map.txt.gz]
-#   --docker-compose <path> Pass a path to docker-compose
-#   --pigz <path>           Pass a path to pigz
 #   --input <dir>           Pass an path to input directory
 #                           [default: ./input]
 #   --output <dir>          Pass an path to output directoryr
 #                           [default: ./output]
-#   pull                    Pull required Docker images
 #   run                     Run the workflow
 
 set -e
@@ -40,10 +35,7 @@ INPUT_DIR="$(pwd)/input"
 OUTPUT_DIR="$(pwd)/output"
 INPUT_REF_FASTA="$(pwd)/ref/GRCm38_p5.fasta.gz"
 INPUT_REF_GENE_MAP_TXT="$(pwd)/ref/GRCm38_p5_gene_map.txt.gz"
-DOCKER_COMPOSE='docker-compose'
-PIGZ='pigz'
 NO_QC=0
-PULL_AND_EXIT=0
 
 function print_version {
   echo "${REPO_NAME}: ${REPO_VERSION}"
@@ -96,20 +88,11 @@ if [[ -n "${1}" ]]; then
       '--ref-gene-map' )
         INPUT_REF_GENE_MAP_TXT="$(print_abspath ${2})" && shift 2
         ;;
-      '--docker-compose' )
-        DOCKER_COMPOSE=${2} && shift 2
-        ;;
-      '--pigz' )
-        PIGZ=${2} && shift 2
-        ;;
       '--input' )
         INPUT_DIR="$(print_abspath ${2})" && shift 2
         ;;
       '--output' )
         OUTPUT_DIR="$(print_abspath ${2})" && shift 2
-        ;;
-      'pull' )
-        PULL_AND_EXIT=1 && shift 1
         ;;
       'run' )
         shift 1
@@ -125,11 +108,7 @@ fi
 
 set -u
 
-PGZ="${PIGZ} -p ${N_THREAD}"
-DC="${DOCKER_COMPOSE} -f $(print_abspath ${REPO_ROOT}/docker-compose.yml)"
-DC_RUN="${DC} run --rm -u $(id -u):$(id -g)"
-[[ ${PULL_AND_EXIT} -ne 0 ]] && echo '>>> pull images' && ${DC} pull && exit 0
-
+PGZ="pigz -p ${N_THREAD}"
 SAMPLE_DIR="${OUTPUT_DIR}/sample"
 REF_DIR="${OUTPUT_DIR}/ref"
 REF_RSEM_DIR="${REF_DIR}/rsem"
@@ -182,19 +161,17 @@ fi
 # 2.  prepare RSEM reference files
 if $(is_not_completed ${WORKFLOW[2]}); then
   echo "${WORKFLOW[2]}"
-  echo '[bowtie2]' | tee -a ${VER_TXT} && ${DC_RUN} bowtie2 --version | tee -a ${VER_TXT}
-  echo '[rsem]' | tee -a ${VER_TXT} && ${DC_RUN} rsem --version | tee -a ${VER_TXT}
+  echo '[bowtie2]' | tee -a ${VER_TXT} && bowtie2 --version | tee -a ${VER_TXT}
+  echo '[rsem]' | tee -a ${VER_TXT} && rsem-calculate-expression --version | tee -a ${VER_TXT}
   mkdir "${REF_RSEM_DIR}"
   ${PGZ} -dc ${INPUT_REF_FASTA} > ${REF_DIR}/${REF_TAG}.fasta
   ${PGZ} -dc ${INPUT_REF_GENE_MAP_TXT} > ${REF_DIR}/${REF_TAG}_gene_map.txt
-  ${DC_RUN} -v ${REF_DIR}:/rf:ro -v ${REF_RSEM_DIR}:/rr \
-    --entrypoint rsem-prepare-reference \
-    rsem \
+  rsem-prepare-reference \
     -p ${N_THREAD} \
     --bowtie2 \
-    --transcript-to-gene-map /rf/${REF_TAG}_gene_map.txt \
-    /rf/${REF_TAG}.fasta \
-    /rr/${REF_TAG} \
+    --transcript-to-gene-map ${REF_DIR}/${REF_TAG}_gene_map.txt \
+    ${REF_DIR}/${REF_TAG}.fasta \
+    ${REF_RSEM_DIR}/${REF_TAG} \
     > ${REF_RSEM_DIR}/rsem_prepare_reference.log 2>&1
   ${PGZ} ${REF_DIR}/${REF_TAG}.fasta ${REF_DIR}/${REF_TAG}_gene_map.txt
   echo_completed ${WORKFLOW[2]}
@@ -204,14 +181,13 @@ fi
 # 3.  execute QC checks using FastQC
 if [[ ${NO_QC} -ne 0 ]] && $(is_not_completed ${WORKFLOW[3]}); then
   echo "${WORKFLOW[3]}"
-  echo '[fastqc]' | tee -a ${VER_TXT} && ${DC_RUN} fastqc --version | tee -a ${VER_TXT}
+  echo '[fastqc]' | tee -a ${VER_TXT} && fastqc --version | tee -a ${VER_TXT}
   for s in $(ls ${SAMPLE_DIR}); do
-    ${DC_RUN} -v ${SAMPLE_DIR}/${s}:/sc \
-      fastqc \
+    fastqc \
       --threads ${N_THREAD} \
       --nogroup \
-      --outdir /sc \
-      /sc/raw.fastq.gz \
+      --outdir ${SAMPLE_DIR}/${s} \
+      ${SAMPLE_DIR}/${s}/raw.fastq.gz \
       > ${SAMPLE_DIR}/${s}/fastqc.log 2>&1
   done
   echo_completed ${WORKFLOW[3]}
@@ -221,18 +197,15 @@ fi
 # 4.  trim and filter sequences
 if $(is_not_completed ${WORKFLOW[4]}); then
   echo "${WORKFLOW[4]}"
-  echo '[prinseq]' | tee -a ${VER_TXT} && ${DC_RUN} prinseq --version | tee -a ${VER_TXT}
-  ${DC_RUN} -v ${SAMPLE_DIR}:/sd --entrypoint bash \
-    prinseq \
-    -c "\
-    ls /sd | xargs -P ${N_THREAD} -I {} bash -c '\
-    gzip -dc /sd/{}/raw.fastq.gz | /usr/local/bin/perl \
+  echo '[prinseq]' | tee -a ${VER_TXT} && prinseq-lite.pl --version | tee -a ${VER_TXT}
+  ls ${SAMPLE_DIR} | xargs -P ${N_THREAD} -I {} bash -c "\
+    gzip -dc ${SAMPLE_DIR}/{}/raw.fastq.gz | /usr/local/bin/perl \
     /usr/local/src/prinseq/prinseq-lite.pl \
     -min_len 30 -trim_tail_right 5 -trim_tail_left 5 \
     -min_qual_mean 20 -trim_qual_right 20 -trim_qual_left 20 \
     -fastq stdin \
-    -out_good /sd/{}/prinseq_good -out_bad /sd/{}/prinseq_bad \
-    > /sd/{}/prinseq_lite.log 2>&1'"
+    -out_good ${SAMPLE_DIR}/{}/prinseq_good -out_bad ${SAMPLE_DIR}/{}/prinseq_bad \
+    > ${SAMPLE_DIR}/{}/prinseq_lite.log 2>&1"
   find ${SAMPLE_DIR} -name 'prinseq_raw.fastq' -or -name 'prinseq_bad.fastq' | xargs ${PGZ}
   echo_completed ${WORKFLOW[4]}
 fi
@@ -242,16 +215,14 @@ fi
 if $(is_not_completed ${WORKFLOW[5]}); then
   echo "${WORKFLOW[5]}"
   for s in $(ls ${SAMPLE_DIR}); do
-    ${DC_RUN} -v ${SAMPLE_DIR}/${s}:/sc -v ${REF_RSEM_DIR}:/rr \
-      --entrypoint rsem-calculate-expression \
-      rsem \
+    rsem-calculate-expression \
       --bowtie2 \
       --estimate-rspd \
       -p ${N_THREAD} \
       --calc-ci \
-      /sc/prinseq_good.fastq \
-      /rr/${REF_TAG} \
-      /sc/rsem_${REF_TAG}_${s} \
+      ${SAMPLE_DIR}/${s}/prinseq_good.fastq \
+      ${REF_RSEM_DIR}/${REF_TAG} \
+      ${SAMPLE_DIR}/${s}/rsem_${REF_TAG}_${s} \
       > ${SAMPLE_DIR}/${s}/rsem_calculate_expression.log 2>&1
   done
   find ${SAMPLE_DIR} -name 'prinseq_good.fastq' | xargs ${PGZ}
