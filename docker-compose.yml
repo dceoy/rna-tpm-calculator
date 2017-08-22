@@ -11,11 +11,16 @@ services:
     volumes:
       - .:/share
     working_dir: /share
-    command:
+    entrypoint:
       - ./workflow.sh
       - --debug
+    command:
       - run
       - --ref
       - ref/GRCm38_p4_TCF7.fasta.gz
       - --ref-gene-map
       - ref/GRCm38_p4_TCF7_gene_map.txt.gz
+      - --input
+      - input
+      - --output
+      - output

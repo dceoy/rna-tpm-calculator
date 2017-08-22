@@ -10,7 +10,7 @@ ADD https://github.com/samtools/samtools/archive/master.tar.gz /usr/local/src
 RUN set -e \
       && apt-get -y update \
       && apt-get -y upgrade \
-      && apt-get -y install autoconf libtbb-dev perl pigz \
+      && apt-get -y install autoconf libtbb-dev perl pigz python \
       && apt-get clean
 
 RUN set -e \
