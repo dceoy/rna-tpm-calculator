@@ -16,15 +16,15 @@
 #   --thread <int>          Limit multithreading
 #   --no-qc                 Skip QC checks with FastQC
 #   --ref <fasta>           Pass a gzip-compressed reference FASTA file
-#                           [default: $(pwd)/ref/GRCm38_p5.fasta.gz]
+#                           [default: ./ref/GRCm38_p5.fasta.gz]
 #   --ref-gene-map <txt>    Pass a gzip-compressed transcript-to-gene-map file
-#                           [default: $(pwd)/ref/GRCm38_p5_gene_map.txt.gz]
+#                           [default: ./ref/GRCm38_p5_gene_map.txt.gz]
 #   --docker-compose <path> Pass a path to docker-compose
 #   --pigz <path>           Pass a path to pigz
-#   --input <dir>           Pass an absolute path to input directory
-#                           [default: $(pwd)/input]
-#   --output <dir>          Pass an absolute path to output directoryr
-#                           [default: $(pwd)/output]
+#   --input <dir>           Pass an path to input directory
+#                           [default: ./input]
+#   --output <dir>          Pass an path to output directoryr
+#                           [default: ./output]
 #   pull                    Pull required Docker images
 #   run                     Run the workflow
 
@@ -58,6 +58,10 @@ function abort {
   exit 1
 }
 
+function print_abspath {
+  python -c "import os; print(os.path.abspath('${*}'))"
+}
+
 function count_cpu_cores {
   case "${OSTYPE}" in
     darwin*)
@@ -87,10 +91,10 @@ if [[ -n "${1}" ]]; then
         NO_QC=1 && shift 1
         ;;
       '--ref' )
-        INPUT_REF_FASTA="$(dirname ${2})/$(basename ${2})" && shift 2
+        INPUT_REF_FASTA="$(print_abspath ${2})" && shift 2
         ;;
       '--ref-gene-map' )
-        INPUT_REF_GENE_MAP_TXT="$(dirname ${2})/$(basename ${2})" && shift 2
+        INPUT_REF_GENE_MAP_TXT="$(print_abspath ${2})" && shift 2
         ;;
       '--docker-compose' )
         DOCKER_COMPOSE=${2} && shift 2
@@ -99,10 +103,10 @@ if [[ -n "${1}" ]]; then
         PIGZ=${2} && shift 2
         ;;
       '--input' )
-        INPUT_DIR="$(dirname ${2})/$(basename ${2})" && shift 2
+        INPUT_DIR="$(print_abspath ${2})" && shift 2
         ;;
       '--output' )
-        OUTPUT_DIR="$(dirname ${2})/$(basename ${2})" && shift 2
+        OUTPUT_DIR="$(print_abspath ${2})" && shift 2
         ;;
       'pull' )
         PULL_AND_EXIT=1 && shift 1
@@ -122,7 +126,7 @@ fi
 set -u
 
 PGZ="${PIGZ} -p ${N_THREAD}"
-DC="${DOCKER_COMPOSE} -f ${REPO_ROOT}/docker-compose.yml"
+DC="${DOCKER_COMPOSE} -f $(print_abspath ${REPO_ROOT}/docker-compose.yml)"
 DC_RUN="${DC} run --rm -u $(id -u):$(id -g)"
 [[ ${PULL_AND_EXIT} -ne 0 ]] && echo '>>> pull images' && ${DC} pull && exit 0
 
@@ -143,11 +147,11 @@ WORKFLOW=(
 )
 
 function is_not_completed {
-  [[ $(grep -ce "^\[.*\] completed: ${*}$" ${COMPLETED_LOG}) -eq 0 ]]
+  [[ $(grep -ce "^completed - .* - ${*}$" ${COMPLETED_LOG}) -eq 0 ]]
 }
 
 function echo_completed {
-  echo "[$(date)] completed: ${*}" | tee -a ${COMPLETED_LOG}
+  echo "completed - $(date) - ${*}" | tee -a ${COMPLETED_LOG}
 }
 
 
@@ -158,7 +162,7 @@ if [[ ! -d "${OUTPUT_DIR}" ]]; then
     - sample
     - ref
     - summary"
-  mkdir ${SAMPLE_DIR} ${REF_DIR} ${SUMMARY_DIR}
+  mkdir -p ${SAMPLE_DIR} ${REF_DIR} ${SUMMARY_DIR}
   echo "[${REPO_NAME}]" | tee ${VER_TXT} && print_version | tee -a ${VER_TXT}
   echo_completed ${WORKFLOW[0]}
 elif [[ ! -f "${COMPLETED_LOG}" ]]; then
