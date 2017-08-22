@@ -205,12 +205,12 @@ if $(is_not_completed ${WORKFLOW[4]}); then
   echo "${WORKFLOW[4]}"
   echo '[prinseq]' | tee -a ${VER_TXT} && prinseq-lite.pl --version | tee -a ${VER_TXT}
   ls -L ${SAMPLE_DIR} | xargs -P ${N_THREAD} -I {} bash -c "\
-    gzip -dc ${SAMPLE_DIR}/{}/raw.fastq.gz | /usr/local/bin/perl \
-    /usr/local/src/prinseq/prinseq-lite.pl \
+    gzip -dc ${SAMPLE_DIR}/{}/raw.fastq.gz | perl /usr/local/src/prinseq/prinseq-lite.pl \
     -min_len 30 -trim_tail_right 5 -trim_tail_left 5 \
     -min_qual_mean 20 -trim_qual_right 20 -trim_qual_left 20 \
     -fastq stdin \
-    -out_good ${SAMPLE_DIR}/{}/prinseq_good -out_bad ${SAMPLE_DIR}/{}/prinseq_bad \
+    -out_good ${SAMPLE_DIR}/{}/prinseq_good \
+    -out_bad ${SAMPLE_DIR}/{}/prinseq_bad \
     > ${SAMPLE_DIR}/{}/prinseq_lite.log 2>&1"
   find ${SAMPLE_DIR} -name 'prinseq_bad.fastq' | xargs ${PGZ}
   find ${SAMPLE_DIR} -name 'prinseq_good.fastq' \
