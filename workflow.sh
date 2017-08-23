@@ -30,7 +30,7 @@ set -e
 REPO_NAME='rna-tpm-calculator'
 REPO_VERSION='v0.0.1'
 REPO_ROOT="$(dirname ${0})"
-REPO_PATH="${REPO_ROOT}/$(basename ${0})"
+WORKFLOW_SH="${REPO_ROOT}/$(basename ${0})"
 INPUT_DIR="$(pwd)/input"
 OUTPUT_DIR="$(pwd)/output"
 INPUT_REF_FASTA="$(pwd)/ref/GRCm38_p5.fasta.gz"
@@ -42,7 +42,7 @@ function print_version {
 }
 
 function print_usage {
-  sed -ne '1,2d; /^#/!q; s/^#$/# /; s/^# //p;' ${REPO_PATH}
+  sed -ne '1,2d; /^#/!q; s/^#$/# /; s/^# //p;' ${WORKFLOW_SH}
 }
 
 function abort {
@@ -109,6 +109,7 @@ fi
 set -u
 
 PGZ="pigz -p ${N_THREAD}"
+CREATE_MATRIX_R="$(print_abspath ${REPO_ROOT}/create_matrix.R)"
 SAMPLE_DIR="${OUTPUT_DIR}/sample"
 REF_DIR="${OUTPUT_DIR}/ref"
 REF_RSEM_DIR="${REF_DIR}/rsem"
@@ -236,10 +237,10 @@ if $(is_not_completed ${WORKFLOW[5]}); then
       > ${SAMPLE_DIR}/${s}/rsem_calculate_expression.log 2>&1
   done
   find ${SAMPLE_DIR} -name 'prinseq_good.fastq' | xargs ${PGZ}
-  find ${SAMPLE_DIR} -name 'rsem.transcript.bam' \
-    | sed -e 's/\/rsem.transcript.bam$//' \
+  find ${SAMPLE_DIR} -name 'rsem_aligned.transcript.bam' \
+    | sed -e 's/\/rsem_aligned.transcript.bam$//' \
     | xargs -P ${N_THREAD} -I {} bash -c \
-    'samtools flagstat {}/rsem.transcript.bam > {}/samtools_flagstat.txt'
+    'samtools flagstat {}/rsem_aligned.transcript.bam > {}/samtools_flagstat.txt'
   find ${SAMPLE_DIR} -name 'samtools_flagstat.txt' \
     | sed -e 's/^.*\/\([^\/]\+\)\/samtools_flagstat\.txt$/\1/' \
     | xargs -P ${N_THREAD} -I {} awk '{
@@ -252,5 +253,6 @@ if $(is_not_completed ${WORKFLOW[5]}); then
       }
     }' ${SAMPLE_DIR}/{}/samtools_flagstat.txt \
     | tee -a ${READ_COUNT_CSV}
+  Rscript ${CREATE_MATRIX_R} --output "${OUTPUT_DIR}" > ${SUMMARY_DIR}/create_matrix.log
   echo_completed ${WORKFLOW[5]}
 fi
