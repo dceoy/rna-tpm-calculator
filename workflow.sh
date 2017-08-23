@@ -143,7 +143,7 @@ if [[ ! -d "${OUTPUT_DIR}" ]]; then
     - sample
     - ref
     - summary"
-  mkdir -p ${SAMPLE_DIR} ${REF_DIR} ${SUMMARY_DIR}
+  mkdir -p ${SAMPLE_DIR} ${REF_RSEM_DIR} ${SUMMARY_DIR}
   echo "[${REPO_NAME}]" | tee ${VER_TXT} && print_version | tee -a ${VER_TXT}
   echo_completed ${WORKFLOW[0]}
 elif [[ ! -f "${COMPLETED_LOG}" ]]; then
@@ -170,7 +170,6 @@ if $(is_not_completed ${WORKFLOW[2]}); then
   echo "${WORKFLOW[2]}"
   echo '[bowtie2]' | tee -a ${VER_TXT} && bowtie2 --version | tee -a ${VER_TXT}
   echo '[rsem]' | tee -a ${VER_TXT} && rsem-calculate-expression --version | tee -a ${VER_TXT}
-  mkdir "${REF_RSEM_DIR}"
   ${PGZ} -dc ${INPUT_REF_FASTA} > ${REF_DIR}/${REF_TAG}.fasta
   ${PGZ} -dc ${INPUT_REF_GENE_MAP_TXT} > ${REF_DIR}/${REF_TAG}_gene_map.txt
   rsem-prepare-reference \

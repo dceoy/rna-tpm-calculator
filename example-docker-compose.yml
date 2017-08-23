@@ -13,21 +13,20 @@ services:
       - .:/share
     working_dir: /share
     entrypoint:
-      - ./workflow.sh
-      - --debug
+      - bash
+      - -c
     environment:
       SLACK_CHANNEL: rnaseq
       SLACK_USER: rna-tpm-calculator
       SLACK_ICON_URL: ${DOCKER_ICON_URL}
       SLACK_URL: ${SLACK_URL}
       HTTPS_PROXY: ${HTTPS_PROXY}
-    command:
-      - run
-      - --ref
-      - ref/GRCm38_p4_TCF7.fasta.gz
-      - --ref-gene-map
-      - ref/GRCm38_p4_TCF7_gene_map.txt.gz
-      - --input
-      - input
-      - --output
-      - output
+    command: >
+      'slack-post --text "The TPM-calculating workflow starts."; \
+       ./workflow.sh --debug run \
+        --ref ./ref/GRCm38_p4_TCF7.fasta.gz \
+        --ref-gene-map ./ref/GRCm38_p4_TCF7_gene_map.txt.gz \
+        --input ./input \
+        --output ./output \
+        && slack-post --text "The TPM-calculating workflow succeeded." \
+        || slack-post --text "The TPM-calculating workflow failed";'
