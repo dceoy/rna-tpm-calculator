@@ -6,11 +6,12 @@ ADD https://github.com/deweylab/RSEM/archive/master.tar.gz /tmp/rsem.tar.gz
 ADD https://sourceforge.net/projects/prinseq/files/latest/download?source=files /tmp/prinseq.tar.gz
 ADD https://github.com/samtools/htslib/archive/master.tar.gz /tmp/htslib.tar.gz
 ADD https://github.com/samtools/samtools/archive/master.tar.gz /tmp/samtools.tar.gz
+ADD https://raw.githubusercontent.com/dceoy/slack-notify/master/slack-post /usr/local/bin/slack-post
 
 RUN set -e \
       && apt-get -y update \
       && apt-get -y upgrade \
-      && apt-get -y install autoconf libtbb-dev perl pigz python \
+      && apt-get -y install autoconf curl libtbb-dev perl pigz python \
       && apt-get clean
 
 RUN set -e \
@@ -53,6 +54,7 @@ RUN set -e \
       && make install
 
 RUN set -e \
+      && chmod 755 /usr/local/bin/slack-post \
       && rm -rf /tmp/*
 
 ENTRYPOINT ["bash", "-c"]

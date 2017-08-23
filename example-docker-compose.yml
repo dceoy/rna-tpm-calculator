@@ -1,8 +1,8 @@
 version: '3'
 
 services:
-  tpm-calc:
-    container_name: tpm-calc
+  tpm:
+    container_name: tpm
     build:
       context: build
       dockerfile: Dockerfile
@@ -15,6 +15,12 @@ services:
     entrypoint:
       - ./workflow.sh
       - --debug
+    environment:
+      SLACK_CHANNEL: rnaseq
+      SLACK_USER: rna-tpm-calculator
+      SLACK_ICON_URL: ${DOCKER_ICON_URL}
+      SLACK_URL: ${SLACK_URL}
+      HTTPS_PROXY: ${HTTPS_PROXY}
     command:
       - run
       - --ref

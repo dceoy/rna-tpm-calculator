@@ -20,17 +20,15 @@ main <- function(opts) {
              bam_uniq = bam_total - bam_secondary,
              bam_mapped_uniq = bam_mapped - bam_secondary) %>%
       select(id, bam_uniq, bam_mapped_uniq, bam_unmapped_uniq, bam_mapped, bam_secondary, bam_total, fastq_qc, fastq_raw)
-
     df_count %>%
       write_csv(file = 'summary/read_count_matrix_unformatted.csv', row.names = FALSE)
-
     df_count %>%
       select(cell_id = id,
              fastq = fastq_raw,
              qc_passed = fastq_qc,
              mapped = bam_mapped_uniq,
              unmapped = bam_unmapped_uniq) %>%
-    write_csv(file = 'summary/read_count_matrix.csv', row.names = FALSE)
+      write_csv(file = 'summary/read_count_matrix.csv', row.names = FALSE)
   }
   tally_tpm <- function() {
     lapply(list(c(path = 'rsem/GRCm38_p4_TCF7.genes.results', tag = 'gene_id'),
