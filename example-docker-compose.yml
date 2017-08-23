@@ -5,6 +5,7 @@ services:
     container_name: tpm-calc
     build:
       context: build
+      dockerfile: Dockerfile
       args:
         http_proxy: ${http_proxy}
     user: ${UID}:${GID}
