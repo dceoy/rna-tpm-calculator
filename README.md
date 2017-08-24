@@ -1,7 +1,7 @@
 rna-tpm-calculator
 ==================
 
-A TPM calculating workflow for RNA-seq
+A TPM calculating workflow for multiple samples in RNA-seq
 
 This workflow depends:
 

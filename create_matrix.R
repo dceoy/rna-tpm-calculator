@@ -8,15 +8,13 @@ Options:
 -h, --help      Print help and exit
 --output        Pass an output directory path' -> doc
 
-sapply(c('docopt', 'stringr', 'tidyverse'), require, character.only = TRUE)
-
 main <- function(opts) {
+  suppressMessages(sapply(c('stringr', 'tidyverse'), require, character.only = TRUE))
   output_dir <- ifelse(is.null(opts[['--output']]),
                        './output/',
                        ifelse(str_detect(opts[['--out']], '/$'),
                               opts[['--output']],
                               str_c(opts[['--output']], '/')))
-
   df_count <- read_csv(file = str_c(output_dir, 'summary/read_count.csv')) %>%
     mutate(src_type = str_c(src, '_', type)) %>%
     select(id, src_type, count) %>%
@@ -25,7 +23,6 @@ main <- function(opts) {
            bam_uniq = bam_total - bam_secondary,
            bam_mapped_uniq = bam_mapped - bam_secondary) %>%
     select(id, bam_uniq, bam_mapped_uniq, bam_unmapped_uniq, bam_mapped, bam_secondary, bam_total, fastq_qc, fastq_raw)
-
   return(c(list(read_count_unformatted = write_csv(df_count,
                                                    path = str_c(output_dir, 'summary/read_count_matrix_unformatted.csv')),
                 read_count_formatted = write_csv(select(df_count,
@@ -50,4 +47,5 @@ main <- function(opts) {
                   sample_dir = str_c(output_dir, 'sample'))))
 }
 
+suppressMessages(require('docopt'))
 main(opts = docopt::docopt(doc))
