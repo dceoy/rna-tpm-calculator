@@ -1,4 +1,4 @@
-FROM dceoy/r-tidyverse
+FROM dceoy/rstudio-server:slim
 
 ADD http://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.11.5.zip /tmp/fastqc.zip
 ADD https://github.com/BenLangmead/bowtie2/releases/download/v2.3.2/bowtie2-2.3.2-linux-x86_64.zip /tmp/bowtie2.zip
