@@ -29,4 +29,5 @@ services:
         --input ./input \
         --output ./output \
         && slack-post --text "The TPM-calculating workflow succeeded." \
-        || slack-post --text "The TPM-calculating workflow failed";'
+        || slack-post --text "The TPM-calculating workflow failed"; \
+      slack-post --text "`cat ./output/completed.log`";'

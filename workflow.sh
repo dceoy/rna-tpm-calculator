@@ -252,6 +252,6 @@ if $(is_not_completed ${WORKFLOW[5]}); then
       }
     }' ${SAMPLE_DIR}/{}/samtools_flagstat.txt \
     | tee -a ${READ_COUNT_CSV}
-  Rscript ${CREATE_MATRIX_R} --output "${OUTPUT_DIR}" > ${SUMMARY_DIR}/create_matrix.log
+  Rscript --verbose ${CREATE_MATRIX_R} --output "${OUTPUT_DIR}" > ${SUMMARY_DIR}/create_matrix.log
   echo_completed ${WORKFLOW[5]}
 fi
