@@ -1,7 +1,7 @@
-FROM dceoy/rstudio-server:slim
+FROM dceoy/r-tidyverse
 
 ADD http://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.11.5.zip /tmp/fastqc.zip
-ADD https://github.com/BenLangmead/bowtie2/releases/download/v2.3.2/bowtie2-2.3.2-linux-x86_64.zip /tmp/bowtie2.zip
+ADD https://github.com/BenLangmead/bowtie2/archive/master.tar.gz /tmp/bowtie2.tar.gz
 ADD https://github.com/deweylab/RSEM/archive/master.tar.gz /tmp/rsem.tar.gz
 ADD https://sourceforge.net/projects/prinseq/files/latest/download?source=files /tmp/prinseq.tar.gz
 ADD https://github.com/samtools/htslib/archive/master.tar.gz /tmp/htslib.tar.gz
@@ -20,9 +20,10 @@ RUN set -e \
       && ln -s /usr/local/src/FastQC/fastqc /usr/local/bin/fastqc
 
 RUN set -e \
-      && unzip -d /usr/local/src /tmp/bowtie2.zip \
-      && mv /usr/local/src/bowtie2-* /usr/local/src/bowtie2 \
-      && find /usr/local/src/bowtie2 -type f -maxdepth 1 -executable | xargs -i ln -s {} /usr/local/bin
+      && tar xvf /tmp/bowtie2.tar.gz -C /usr/local/src \
+      && cd /usr/local/src/bowtie2-master \
+      && make \
+      && make install
 
 RUN set -e \
       && tar xvf /tmp/rsem.tar.gz -C /usr/local/src \
