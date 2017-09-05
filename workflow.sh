@@ -158,7 +158,7 @@ if $(is_not_completed ${WORKFLOW[1]}); then
   ls -L ${INPUT_DIR} | xargs -P ${N_THREAD} -I {} bash -c \
     "mkdir ${SAMPLE_DIR}/{} && cat ${INPUT_DIR}/{}/*.fastq.gz > ${SAMPLE_DIR}/{}/raw.fastq.gz"
   find ${SAMPLE_DIR} -name 'raw.fastq.gz' \
-    | xargs -P ${N_THREAD} zgrep -ce '^@[A-Z0-9\-]\+:' \
+    | xargs -P ${N_THREAD} -I {} bash -c 'zgrep -ce "^$(zcat {} | head -1 | cut -d : -f 1)" {} | xargs -I @ echo "{}:@"' \
     | sed -e 's/^.*\/\([^\/]\+\)\/raw\.fastq\.gz:\([0-9]\+\)$/\1,fastq,raw,\2/' \
     | tee -a ${READ_COUNT_CSV}
   echo_completed ${WORKFLOW[1]}
@@ -214,7 +214,7 @@ if $(is_not_completed ${WORKFLOW[4]}); then
     > ${SAMPLE_DIR}/{}/prinseq_lite.log 2>&1"
   find ${SAMPLE_DIR} -name 'prinseq_bad.fastq' | xargs ${PGZ}
   find ${SAMPLE_DIR} -name 'prinseq_good.fastq' \
-    | xargs -P ${N_THREAD} zgrep -ce '^@[A-Z0-9\-]\+:' \
+    | xargs -P ${N_THREAD} -I {} bash -c 'zgrep -ce "^$(zcat {} | head -1 | cut -d : -f 1)" {} | xargs -I @ echo "{}:@"' \
     | sed -e 's/^.*\/\([^\/]\+\)\/prinseq_good\.fastq:\([0-9]\+\)$/\1,fastq,qc,\2/' \
     | tee -a ${READ_COUNT_CSV}
   echo_completed ${WORKFLOW[4]}
