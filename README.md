@@ -3,7 +3,7 @@ rna-tpm-calculator
 
 A TPM calculating workflow for multiple samples in RNA-seq
 
-This workflow depends:
+Dependencies:
 
 - Bowtie2
 - FastQC

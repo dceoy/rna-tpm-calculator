@@ -11,7 +11,7 @@ ADD https://raw.githubusercontent.com/dceoy/slack-notify/master/slack-post /usr/
 RUN set -e \
       && apt-get -y update \
       && apt-get -y upgrade \
-      && apt-get -y install libtbb-dev pigz \
+      && apt-get -y install libtbb-dev openjdk-8-jre pigz \
       && apt-get clean
 
 RUN set -e \
