@@ -125,6 +125,7 @@ WORKFLOW=(
   '>>> execute QC checks using FastQC'
   '>>> trim and filter sequences'
   '>>> map reads and calculate TPM'
+  '>>> create summary tables'
 )
 
 function is_not_completed {
@@ -149,7 +150,6 @@ if [[ ! -d "${OUTPUT_DIR}" ]]; then
 elif [[ ! -f "${COMPLETED_LOG}" ]]; then
   touch ${COMPLETED_LOG}
 fi
-echo 'id,src,type,count' > ${READ_COUNT_CSV}
 
 
 # 1.  concatenate fastq files
@@ -157,10 +157,6 @@ if $(is_not_completed ${WORKFLOW[1]}); then
   echo "${WORKFLOW[1]}"
   ls -L ${INPUT_DIR} | xargs -P ${N_THREAD} -I {} bash -c \
     "mkdir ${SAMPLE_DIR}/{} && cat ${INPUT_DIR}/{}/*.fastq.gz > ${SAMPLE_DIR}/{}/raw.fastq.gz"
-  find ${SAMPLE_DIR} -name 'raw.fastq.gz' \
-    | xargs -P ${N_THREAD} -I {} bash -c 'zgrep -ce "^$(zcat {} | head -1 | cut -d : -f 1)" {} | xargs -I @ echo "{}:@"' \
-    | sed -e 's/^.*\/\([^\/]\+\)\/raw\.fastq\.gz:\([0-9]\+\)$/\1,fastq,raw,\2/' \
-    | tee -a ${READ_COUNT_CSV}
   echo_completed ${WORKFLOW[1]}
 fi
 
@@ -213,10 +209,6 @@ if $(is_not_completed ${WORKFLOW[4]}); then
     -out_bad ${SAMPLE_DIR}/{}/prinseq_bad \
     > ${SAMPLE_DIR}/{}/prinseq_lite.log 2>&1"
   find ${SAMPLE_DIR} -name 'prinseq_bad.fastq' | xargs ${PGZ}
-  find ${SAMPLE_DIR} -name 'prinseq_good.fastq' \
-    | xargs -P ${N_THREAD} -I {} bash -c 'zgrep -ce "^$(zcat {} | head -1 | cut -d : -f 1)" {} | xargs -I @ echo "{}:@"' \
-    | sed -e 's/^.*\/\([^\/]\+\)\/prinseq_good\.fastq:\([0-9]\+\)$/\1,fastq,qc,\2/' \
-    | tee -a ${READ_COUNT_CSV}
   echo_completed ${WORKFLOW[4]}
 fi
 
@@ -236,6 +228,22 @@ if $(is_not_completed ${WORKFLOW[5]}); then
       > ${SAMPLE_DIR}/${s}/rsem_calculate_expression.log 2>&1
   done
   find ${SAMPLE_DIR} -name 'prinseq_good.fastq' | xargs ${PGZ}
+  echo_completed ${WORKFLOW[5]}
+fi
+
+
+# 6. create summary tables
+if $(is_not_completed ${WORKFLOW[6]}); then
+  echo "${WORKFLOW[6]}"
+  echo 'id,src,type,count' > ${READ_COUNT_CSV}
+  find ${SAMPLE_DIR} -name 'raw.fastq.gz' \
+    | xargs -P ${N_THREAD} -I {} bash -c 'zgrep -ce "^$(zcat {} | head -1 | cut -d : -f 1)" {} | xargs -I @ echo "{}:@"' \
+    | sed -e 's/^.*\/\([^\/]\+\)\/raw\.fastq\.gz:\([0-9]\+\)$/\1,fastq,raw,\2/' \
+    | tee -a ${READ_COUNT_CSV}
+  find ${SAMPLE_DIR} -name 'prinseq_good.fastq.gz' \
+    | xargs -P ${N_THREAD} -I {} bash -c 'zgrep -ce "^$(zcat {} | head -1 | cut -d : -f 1)" {} | xargs -I @ echo "{}:@"' \
+    | sed -e 's/^.*\/\([^\/]\+\)\/prinseq_good\.fastq\.gz:\([0-9]\+\)$/\1,fastq,qc,\2/' \
+    | tee -a ${READ_COUNT_CSV}
   find ${SAMPLE_DIR} -name 'rsem_aligned.transcript.bam' \
     | sed -e 's/\/rsem_aligned.transcript.bam$//' \
     | xargs -P ${N_THREAD} -I {} bash -c \
@@ -252,6 +260,6 @@ if $(is_not_completed ${WORKFLOW[5]}); then
       }
     }' ${SAMPLE_DIR}/{}/samtools_flagstat.txt \
     | tee -a ${READ_COUNT_CSV}
-  Rscript --verbose ${CREATE_MATRIX_R} --output "${OUTPUT_DIR}" > ${SUMMARY_DIR}/create_matrix.log
-  echo_completed ${WORKFLOW[5]}
+  Rscript --verbose ${CREATE_MATRIX_R} --output "${OUTPUT_DIR}"
+  echo_completed ${WORKFLOW[6]}
 fi
