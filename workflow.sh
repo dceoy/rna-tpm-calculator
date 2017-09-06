@@ -181,7 +181,7 @@ fi
 
 
 # 3.  execute QC checks using FastQC
-if [[ ${NO_QC} -ne 0 ]] && $(is_not_completed ${WORKFLOW[3]}); then
+if [[ ${NO_QC} -eq 0 ]] && $(is_not_completed ${WORKFLOW[3]}); then
   echo "${WORKFLOW[3]}"
   echo '[fastqc]' | tee -a ${VER_TXT} && fastqc --version | tee -a ${VER_TXT}
   for s in $(ls -L ${SAMPLE_DIR}); do
